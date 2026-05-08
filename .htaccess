@@ -1,0 +1,5 @@
+Options -Indexes
+
+<FilesMatch "\.(mp4)$">
+    Header set Access-Control-Allow-Origin "*"
+</FilesMatch>
