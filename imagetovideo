@@ -1,0 +1,78 @@
+<?php
+header('Content-Type: application/json');
+
+$uploadDir = __DIR__ . '/uploads/';
+$videoDir = __DIR__ . '/videos/';
+
+if (!file_exists($uploadDir)) {
+    mkdir($uploadDir, 0755, true);
+}
+
+if (!file_exists($videoDir)) {
+    mkdir($videoDir, 0755, true);
+}
+
+if (!isset($_FILES['image'])) {
+    echo json_encode([
+        'success' => false,
+        'error' => 'No image uploaded'
+    ]);
+    exit;
+}
+
+$ext = strtolower(pathinfo($_FILES['image']['name'], PATHINFO_EXTENSION));
+
+if (!in_array($ext, ['jpg', 'jpeg', 'png'])) {
+    echo json_encode([
+        'success' => false,
+        'error' => 'Only JPG, JPEG or PNG files are allowed'
+    ]);
+    exit;
+}
+
+$id = uniqid('video_', true);
+
+$inputFile = $uploadDir . $id . '.' . $ext;
+$outputFile = $videoDir . $id . '.mp4';
+
+if (!move_uploaded_file($_FILES['image']['tmp_name'], $inputFile)) {
+    echo json_encode([
+        'success' => false,
+        'error' => 'Could not save uploaded image'
+    ]);
+    exit;
+}
+
+$ffmpeg = 'ffmpeg';
+
+$filter = "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,zoompan=z='min(zoom+0.0015,1.12)':d=175:s=1080x1920:fps=25,format=yuv420p";
+
+$cmd = $ffmpeg
+    . ' -y -loop 1 -i ' . escapeshellarg($inputFile)
+    . ' -vf ' . escapeshellarg($filter)
+    . ' -t 7 -c:v libx264 -pix_fmt yuv420p '
+    . escapeshellarg($outputFile)
+    . ' 2>&1';
+
+$output = shell_exec($cmd);
+
+if (!file_exists($outputFile)) {
+    echo json_encode([
+        'success' => false,
+        'error' => 'Video was not created. FFmpeg may not be installed or shell_exec may be blocked.',
+        'debug' => $output
+    ]);
+    exit;
+}
+
+$protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https://' : 'http://';
+$domain = $_SERVER['HTTP_HOST'];
+
+$basePath = rtrim(dirname($_SERVER['SCRIPT_NAME']), '/\\');
+$videoUrl = $protocol . $domain . $basePath . '/videos/' . basename($outputFile);
+
+echo json_encode([
+    'success' => true,
+    'video_url' => $videoUrl,
+    'file_name' => basename($outputFile)
+]);
